@@ -582,20 +582,38 @@ kissat_spectral_preprocessing (kissat *solver) {
 
   /* ── Set target phases from compound vote ────────────────────── */
 
-  /* Compute vote magnitude statistics for confidence thresholding.
-   * Only set target phases for high-confidence variables (|vote| above
-   * the 25th percentile). Low-confidence variables near the spectral
-   * cut are ambiguous — leave them for Kissat's own heuristics. */
-  double vote_abs_sum = 0.0;
+  /* Only set target phases for the top quartile of variables by vote
+   * magnitude. These are variables where all 15 shell Fiedler vectors
+   * strongly agree — high confidence. The bottom 75% are left to
+   * Kissat's CDCL heuristics which are superior for ambiguous variables.
+   *
+   * This prevents catastrophic regressions on instances where the
+   * spectral partition anti-correlates with the solution. */
   unsigned n_active = 0;
+  double *abs_votes = (double *) malloc (n_vars * sizeof (double));
+  if (!abs_votes) {
+    free (theta); free (fiedler); free (votes); free (edges);
+    return;
+  }
   for (unsigned i = 0; i < n_vars; i++) {
     if (!solver->flags[i].eliminated) {
-      vote_abs_sum += fabs (votes[i]);
-      n_active++;
+      abs_votes[n_active++] = fabs (votes[i]);
     }
   }
-  double vote_mean_abs = (n_active > 0) ? vote_abs_sum / n_active : 0.0;
-  double confidence_threshold = vote_mean_abs * 0.25;  /* bottom 25% = skip */
+  /* Find 75th percentile via partial sort */
+  unsigned p75_idx = n_active * 3 / 4;
+  for (unsigned i = 0; i <= p75_idx && i < n_active; i++) {
+    unsigned max_idx = i;
+    for (unsigned j = i + 1; j < n_active; j++)
+      if (abs_votes[j] > abs_votes[max_idx])
+        max_idx = j;
+    double tmp = abs_votes[i];
+    abs_votes[i] = abs_votes[max_idx];
+    abs_votes[max_idx] = tmp;
+  }
+  double confidence_threshold = (p75_idx < n_active) ?
+      abs_votes[p75_idx] : 0.0;
+  free (abs_votes);
 
   unsigned positive = 0, negative = 0, skipped = 0;
 
