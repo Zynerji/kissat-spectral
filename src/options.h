@@ -86,6 +86,7 @@
   OPTION (otfs, 1, 0, 1, "on-the-fly strengthening") \
   OPTION (phase, 1, 0, 1, "initial decision phase") \
   OPTION (phasesaving, 1, 0, 1, "enable phase saving") \
+  OPTION (spectral, 0, 0, 1, "chiral spectral preprocessing [Knopp 2026]") \
   OPTION (preprocess, 1, 0, 1, "initial preprocessing") \
   OPTION (preprocessbackbone, 1, 0, 1, "backbone preprocessing") \
   OPTION (preprocesscongruence, 1, 0, 1, "congruence preprocessing") \

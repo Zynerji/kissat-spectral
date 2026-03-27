@@ -1,5 +1,6 @@
 #include "application.h"
 #include "check.h"
+#include "spectral.h"
 #include "colors.h"
 #include "config.h"
 #include "error.h"
@@ -804,6 +805,8 @@ static int run_application (kissat *solver, int argc, char **argv,
   print_limits (&application);
   kissat_section (solver, "solving");
 #endif
+  if (GET_OPTION (spectral))
+    kissat_spectral_preprocessing (solver);
   int res = kissat_solve (solver);
 #ifndef NPROOFS
   close_proof (&application);
