@@ -537,10 +537,38 @@ kissat_spectral_preprocessing (kissat *solver) {
       double lambda2 =
           compute_fiedler (&L, fiedler, SPECTRAL_MAX_ITERS, SPECTRAL_TOL);
 
-      /* Accumulate weighted votes from Fiedler sign */
+      /* Center the Fiedler vector at its median for balanced partitioning.
+       * Power iteration may leave residual constant component that biases
+       * all values to one sign. Median-centering guarantees ~50/50 split. */
+      {
+        /* Compute median via partial sort (O(n) average) */
+        double *sorted = (double *) malloc (n_vars * sizeof (double));
+        if (sorted) {
+          memcpy (sorted, fiedler, n_vars * sizeof (double));
+          /* Simple selection: sort and take middle element */
+          for (unsigned i = 0; i < n_vars / 2 + 1; i++) {
+            unsigned min_idx = i;
+            for (unsigned j = i + 1; j < n_vars; j++)
+              if (sorted[j] < sorted[min_idx])
+                min_idx = j;
+            double tmp = sorted[i];
+            sorted[i] = sorted[min_idx];
+            sorted[min_idx] = tmp;
+          }
+          double median = sorted[n_vars / 2];
+          for (unsigned i = 0; i < n_vars; i++)
+            fiedler[i] -= median;
+          free (sorted);
+        }
+      }
+
+      /* Accumulate weighted votes from centered Fiedler sign.
+       * Use magnitude as confidence: variables far from the median
+       * get stronger votes than those near the cut. */
       for (unsigned i = 0; i < n_vars; i++) {
         double sign = (fiedler[i] >= 0.0) ? 1.0 : -1.0;
-        votes[i] += shell->weight * sign;
+        double magnitude = fabs (fiedler[i]);
+        votes[i] += shell->weight * sign * (1.0 + magnitude);
       }
 
       sparse_free (&L);
