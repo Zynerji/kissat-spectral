@@ -580,69 +580,54 @@ kissat_spectral_preprocessing (kissat *solver) {
       "spectral: computed %u shell Fiedler vectors (5 omegas x 3 shells)",
       total_shells);
 
-  /* ── Set target phases from compound vote ────────────────────── */
+  /* ── Boost variable activities from spectral centrality ─────── */
 
-  /* Only set target phases for the top quartile of variables by vote
-   * magnitude. These are variables where all 15 shell Fiedler vectors
-   * strongly agree — high confidence. The bottom 75% are left to
-   * Kissat's CDCL heuristics which are superior for ambiguous variables.
+  /* Instead of setting target phases (which can catastrophically
+   * mislead CDCL when the Fiedler vector anti-correlates with the
+   * solution), we boost VSIDS activity scores for spectrally
+   * important variables. This tells Kissat WHICH variables to
+   * decide first (the structurally critical ones), not WHAT value
+   * to assign (which CDCL's phase saving handles better).
    *
-   * This prevents catastrophic regressions on instances where the
-   * spectral partition anti-correlates with the solution. */
-  unsigned n_active = 0;
-  double *abs_votes = (double *) malloc (n_vars * sizeof (double));
-  if (!abs_votes) {
-    free (theta); free (fiedler); free (votes); free (edges);
-    return;
-  }
+   * Variables with high |vote| across shells are at the spectral
+   * partition boundary — they're the structurally important
+   * "hinge" variables whose assignment most affects satisfiability.
+   * Deciding them early lets CDCL propagate more implications. */
+
+  /* Normalize votes to [0, 1] range for activity boost */
+  double max_abs_vote = 0.0;
   for (unsigned i = 0; i < n_vars; i++) {
-    if (!solver->flags[i].eliminated) {
-      abs_votes[n_active++] = fabs (votes[i]);
-    }
+    double av = fabs (votes[i]);
+    if (av > max_abs_vote)
+      max_abs_vote = av;
   }
-  /* Find 75th percentile via partial sort */
-  unsigned p75_idx = n_active * 3 / 4;
-  for (unsigned i = 0; i <= p75_idx && i < n_active; i++) {
-    unsigned max_idx = i;
-    for (unsigned j = i + 1; j < n_active; j++)
-      if (abs_votes[j] > abs_votes[max_idx])
-        max_idx = j;
-    double tmp = abs_votes[i];
-    abs_votes[i] = abs_votes[max_idx];
-    abs_votes[max_idx] = tmp;
-  }
-  double confidence_threshold = (p75_idx < n_active) ?
-      abs_votes[p75_idx] : 0.0;
-  free (abs_votes);
 
-  unsigned positive = 0, negative = 0, skipped = 0;
+  unsigned boosted = 0;
+  if (max_abs_vote > 1e-10 && solver->scores.score) {
+    double base_score = solver->scinc;  /* current VSIDS increment */
 
-  for (unsigned idx = 0; idx < n_vars; idx++) {
-    /* Skip eliminated variables */
-    if (solver->flags[idx].eliminated)
-      continue;
+    for (unsigned idx = 0; idx < n_vars; idx++) {
+      if (solver->flags[idx].eliminated)
+        continue;
 
-    /* Skip low-confidence variables — let Kissat decide */
-    if (fabs (votes[idx]) < confidence_threshold) {
-      skipped++;
-      continue;
+      /* Spectral importance: normalized |vote| in [0, 1] */
+      double importance = fabs (votes[idx]) / max_abs_vote;
+
+      /* Only boost top-half variables (importance > 0.5) */
+      if (importance > 0.5) {
+        /* Boost activity by importance * base_score.
+         * This puts spectrally important variables at the top of
+         * the VSIDS heap, so they get decided first. */
+        solver->scores.score[idx] += importance * base_score;
+        solver->scores.tainted = true;  /* mark heap for rebuild */
+        boosted++;
+      }
     }
-
-    value phase;
-    if (votes[idx] > 0.0) {
-      phase = 1;
-      positive++;
-    } else {
-      phase = -1;
-      negative++;
-    }
-
-    solver->phases.target[idx] = phase;
   }
 
   kissat_message (solver,
-      "spectral: set %u positive, %u negative target phases (%u skipped)",
-      positive, negative, skipped);
+      "spectral: boosted activity for %u variables (of %u total)",
+      boosted, n_vars);
 
   /* ── Cleanup ─────────────────────────────────────────────────── */
 
