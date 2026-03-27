@@ -86,7 +86,6 @@
   OPTION (otfs, 1, 0, 1, "on-the-fly strengthening") \
   OPTION (phase, 1, 0, 1, "initial decision phase") \
   OPTION (phasesaving, 1, 0, 1, "enable phase saving") \
-  OPTION (spectral, 0, 0, 1, "chiral spectral preprocessing [Knopp 2026]") \
   OPTION (preprocess, 1, 0, 1, "initial preprocessing") \
   OPTION (preprocessbackbone, 1, 0, 1, "backbone preprocessing") \
   OPTION (preprocesscongruence, 1, 0, 1, "congruence preprocessing") \
@@ -130,6 +129,7 @@
   OPTION (shrink, 3, 0, 3, "learned clauses (1=bin,2=lrg,3=rec)") \
   OPTION (simplify, 1, 0, 1, "enable probing and elimination") \
   OPTION (smallclauses, 1e5, 0, INT_MAX, "small clauses limit") \
+  OPTION (spectral, 0, 0, 1, "chiral spectral preprocessing [Knopp 2026]") \
   OPTION (stable, STABLE_DEFAULT, 0, 2, "enable stable search mode") \
   NQTOPT (statistics, 0, 0, 1, "print complete statistics") \
   OPTION (substitute, 1, 0, 1, "equivalent literal substitution") \
