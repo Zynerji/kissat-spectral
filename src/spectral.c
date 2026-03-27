@@ -582,31 +582,49 @@ kissat_spectral_preprocessing (kissat *solver) {
 
   /* ── Set target phases from compound vote ────────────────────── */
 
-  unsigned positive = 0, negative = 0;
+  /* Compute vote magnitude statistics for confidence thresholding.
+   * Only set target phases for high-confidence variables (|vote| above
+   * the 25th percentile). Low-confidence variables near the spectral
+   * cut are ambiguous — leave them for Kissat's own heuristics. */
+  double vote_abs_sum = 0.0;
+  unsigned n_active = 0;
+  for (unsigned i = 0; i < n_vars; i++) {
+    if (!solver->flags[i].eliminated) {
+      vote_abs_sum += fabs (votes[i]);
+      n_active++;
+    }
+  }
+  double vote_mean_abs = (n_active > 0) ? vote_abs_sum / n_active : 0.0;
+  double confidence_threshold = vote_mean_abs * 0.25;  /* bottom 25% = skip */
+
+  unsigned positive = 0, negative = 0, skipped = 0;
 
   for (unsigned idx = 0; idx < n_vars; idx++) {
     /* Skip eliminated variables */
     if (solver->flags[idx].eliminated)
       continue;
 
+    /* Skip low-confidence variables — let Kissat decide */
+    if (fabs (votes[idx]) < confidence_threshold) {
+      skipped++;
+      continue;
+    }
+
     value phase;
     if (votes[idx] > 0.0) {
       phase = 1;
       positive++;
-    } else if (votes[idx] < 0.0) {
+    } else {
       phase = -1;
       negative++;
-    } else {
-      phase = 1; /* tie-break positive */
-      positive++;
     }
 
     solver->phases.target[idx] = phase;
   }
 
   kissat_message (solver,
-      "spectral: set %u positive, %u negative target phases",
-      positive, negative);
+      "spectral: set %u positive, %u negative target phases (%u skipped)",
+      positive, negative, skipped);
 
   /* ── Cleanup ─────────────────────────────────────────────────── */
 
